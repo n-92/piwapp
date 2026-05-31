@@ -1,6 +1,6 @@
 # piwapp
 
-**Talk to WhatsApp from Python and let an AI do it for you.**
+**Talk to WhatsApp from Python or let an AI do it for you.**
 
 piwapp is a WhatsApp client written entirely in Python. You link it to your phone
 by scanning a QR code (just like WhatsApp Web), and from then on your code can
