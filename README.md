@@ -1,4 +1,4 @@
-![alt text](piwapp.png "Logo")
+![piwapp](https://raw.githubusercontent.com/n-92/piwapp/main/piwapp.png "piwapp")
 
 # piwapp
 
