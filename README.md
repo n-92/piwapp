@@ -1,3 +1,5 @@
+![alt text](piwapp.png "Logo")
+
 # piwapp
 
 **Talk to WhatsApp from Python or let an AI do it for you.**
