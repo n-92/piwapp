@@ -1,0 +1,61 @@
+# ── Secrets: WhatsApp auth / Signal session material (NEVER commit) ──
+# device credentials, persisted Signal keys, backups, rejected sessions.
+# All auth creds live as root-level JSON files — ignore them brand-agnostically
+# so legacy and current device files are always covered.
+/*.json
+*.keys
+*.rejected
+*.bak
+*.bak-*
+*_auth*.json
+auth*.json
+
+# QR login images / refs
+*qr*.png
+qr.txt
+
+# Local message archives (contain private message content)
+*.db
+*.db-journal
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# ── Diagnostic scaffolding (not part of piwapp) ──
+# the Node "real Baileys" reference harness used for frame-diffing
+baileys-ref/
+
+# ── Logs & run output ──
+*.log
+*.err
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ── Virtual environments ──
+.venv/
+venv/
+env/
+
+# ── Editor / OS / tooling ──
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.claude/
+
+# live-conversation runtime scratch
+convo_*.txt
+*.err
+dog.jpg

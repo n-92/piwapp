@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "piwapp"
+version = "0.0.1"
+description = "Async Python reimplementation of the Baileys WhatsApp Web API, with first-class group chat support."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "piwapp contributors" }]
+keywords = ["whatsapp", "baileys", "whatsapp-web", "messaging", "groups"]
+dependencies = [
+    "websockets>=14",
+    "cryptography>=42",
+    "PyNaCl>=1.5",
+    "pydantic>=2.6",
+    "pydantic-settings>=2.2",
+    "SQLAlchemy>=2.0",
+    "aiosqlite>=0.20",
+    "aiohttp>=3.9",
+    "aiofiles>=23",
+    "protobuf>=5",
+    "qrcode>=7.4",
+    "Pillow>=10",
+    "rich>=13",
+    "tenacity>=8.2",
+    "phonenumbers>=8.13",
+    "typer>=0.12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "hypothesis>=6",
+    "pytest-cov>=5",
+    "grpcio-tools>=1.60",  # provides protoc to recompile WAProto.proto
+]
+mcp = [
+    "mcp[cli]>=1.2",  # Model Context Protocol server (expose piwapp to an LLM)
+]
+
+[project.scripts]
+piwapp = "piwapp.__main__:main"
+piwapp-mcp = "piwapp.mcp_server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["piwapp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"
+filterwarnings = ["error::DeprecationWarning:piwapp.*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
