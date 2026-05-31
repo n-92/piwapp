@@ -4,13 +4,25 @@ build-backend = "hatchling.build"
 
 [project]
 name = "piwapp"
-version = "0.0.1"
-description = "Async Python reimplementation of the Baileys WhatsApp Web API, with first-class group chat support."
+version = "0.1.0"
+description = "Pure-Python WhatsApp client (Noise + Signal, no browser/Node/Go bridge) with first-class group chat and an MCP server for LLMs."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
-authors = [{ name = "piwapp contributors" }]
-keywords = ["whatsapp", "baileys", "whatsapp-web", "messaging", "groups"]
+authors = [{ name = "N92", email = "au.naingoo@gmail.com" }]
+keywords = ["whatsapp", "whatsapp-web", "baileys", "signal-protocol", "messaging", "groups", "mcp", "chatbot"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications :: Chat",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Framework :: AsyncIO",
+]
 dependencies = [
     "websockets>=14",
     "cryptography>=42",
@@ -42,12 +54,22 @@ mcp = [
     "mcp[cli]>=1.2",  # Model Context Protocol server (expose piwapp to an LLM)
 ]
 
+[project.urls]
+Homepage = "https://github.com/n-92/piwapp"
+Repository = "https://github.com/n-92/piwapp"
+Issues = "https://github.com/n-92/piwapp/issues"
+
 [project.scripts]
 piwapp = "piwapp.__main__:main"
 piwapp-mcp = "piwapp.mcp_server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["piwapp"]
+
+# Explicitly scope the sdist so it can NEVER pick up local auth files,
+# databases, or the baileys-ref harness sitting in the working tree.
+[tool.hatch.build.targets.sdist]
+include = ["piwapp", "README.md", "USAGE.md", "LICENSE", "pyproject.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
