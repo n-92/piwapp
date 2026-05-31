@@ -4,12 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "piwapp"
-version = "0.1.0"
-description = "Pure-Python WhatsApp client (Noise + Signal, no browser/Node/Go bridge) with first-class group chat and an MCP server for LLMs."
+version = "0.1.1"
+description = "Async Python WhatsApp Web API, with first-class group chat support."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
-authors = [{ name = "N92", email = "au.naingoo@gmail.com" }]
+authors = [{ name = "Aung Naing Oo", email = "au.naingoo@gmail.com" }]
 keywords = ["whatsapp", "whatsapp-web", "baileys", "signal-protocol", "messaging", "groups", "mcp", "chatbot"]
 classifiers = [
     "Development Status :: 4 - Beta",
