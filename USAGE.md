@@ -3,19 +3,19 @@
 A practical guide to what piwapp can do today: pair to WhatsApp, stay online,
 receive messages, and send 1:1 text — all in pure Python.
 
-> Requires **Python 3.12+** and the dependencies in `pyproject.toml`
-> (`pip install -e ".[dev]"`).
+> Requires **Python 3.12+**. Install with `pip install piwapp`
+> (or `pip install "piwapp[mcp]"` for the MCP server).
 
 ---
 
 ## 1. Quick start — the CLI
 
-The fastest way to try it. From the project root:
+Installing piwapp adds a `piwapp` command (equivalent to `python -m piwapp`):
 
 ```bash
-python -m piwapp                 # uses ./piwapp_auth.json (created on first run)
+piwapp                           # uses ./piwapp_auth.json (created on first run)
 # or a custom auth file:
-python -m piwapp my_account.json
+piwapp my_account.json
 ```
 
 What happens:
@@ -259,7 +259,7 @@ Or use the CLI helper: `python scripts/query.py acct.db` (summary),
 Desktop, Claude Code, any MCP client) can query your chat archive and — in live
 mode — send messages.
 
-Install the extra: `pip install -e ".[mcp]"`.
+Install the extra: `pip install "piwapp[mcp]"` (adds the `piwapp-mcp` command).
 
 **Two tiers of tools:**
 
@@ -293,10 +293,10 @@ one so it never collides with your other sessions).
 
 ```bash
 # read-only over the archive
-PIWAPP_DB=piwapp_capture.json.db python -m piwapp.mcp_server
+PIWAPP_DB=piwapp_capture.json.db piwapp-mcp
 
 # live (send + read), with a dedicated paired device
-PIWAPP_AUTH=piwapp_mcp.json PIWAPP_DB=piwapp_mcp.json.db python -m piwapp.mcp_server
+PIWAPP_AUTH=piwapp_mcp.json PIWAPP_DB=piwapp_mcp.json.db piwapp-mcp
 ```
 
 **Wire into Claude Desktop** (`claude_desktop_config.json`):
@@ -304,30 +304,27 @@ PIWAPP_AUTH=piwapp_mcp.json PIWAPP_DB=piwapp_mcp.json.db python -m piwapp.mcp_se
 ```json
 {
   "mcpServers": {
-    "piwapp-whatsapp": {
-      "command": "C:\\Users\\N92\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
-      "args": ["-m", "piwapp.mcp_server"],
+    "piwapp": {
+      "command": "piwapp-mcp",
       "env": {
-        "PYTHONPATH": "D:\\Projects\\57410A",
-        "PIWAPP_DB": "D:\\Projects\\57410A\\piwapp_capture.json.db"
+        "PIWAPP_DB": "/full/path/piwapp_capture.json.db"
       }
     }
   }
 }
 ```
 
-Add `"PIWAPP_AUTH": "...\\piwapp_mcp.json"` to that `env` block to enable sending.
+Add `"PIWAPP_AUTH": "/full/path/piwapp_mcp.json"` to that `env` block to enable sending.
 
 **Or via Claude Code CLI:**
 
 ```bash
-claude mcp add piwapp-whatsapp \
-  -e PYTHONPATH=D:\Projects\57410A \
-  -e PIWAPP_DB=D:\Projects\57410A\piwapp_capture.json.db \
-  -- python -m piwapp.mcp_server
+claude mcp add piwapp \
+  -e PIWAPP_DB=/full/path/piwapp_capture.json.db \
+  -- piwapp-mcp
 ```
 
-> Config values shown match this machine. `send_message` accepts a full JID or a
+> `send_message` accepts a full JID or a
 > bare phone number (treated as a 1:1 chat). The raw message protobuf is never
 > exposed through MCP — only decoded text + metadata.
 

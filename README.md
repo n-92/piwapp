@@ -42,16 +42,31 @@ down to the encryption.
 Requires **Python 3.12+**.
 
 ```bash
-git clone <your-repo-url> piwapp && cd piwapp
-pip install -e ".[mcp]"      # ".[mcp]" includes the MCP server; use ".[dev]" for tests
+pip install piwapp            # core library
+pip install "piwapp[mcp]"     # …or with the MCP server for LLMs
 ```
+
+Installing also adds two command-line tools to your `PATH`:
+
+- **`piwapp`** — the QR-login client (same as `python -m piwapp`)
+- **`piwapp-mcp`** — the MCP server (same as `python -m piwapp.mcp_server`)
+
+<details>
+<summary>From source (for development)</summary>
+
+```bash
+git clone https://github.com/n-92/piwapp && cd piwapp
+pip install -e ".[dev]"       # editable install + test deps
+python -m pytest              # ~147 tests
+```
+</details>
 
 ---
 
 ## 60-second quick start (no code)
 
 ```bash
-python -m piwapp            # creates/uses ./piwapp_auth.json
+piwapp                     # creates/uses ./piwapp_auth.json
 ```
 
 A QR code prints in your terminal (and saves to `piwapp_qr.png`). Scan it with
@@ -181,11 +196,11 @@ today?"*, *"watch the group and reply to anyone who messages."*
 ### Setup (3 steps)
 
 ```bash
-# 1. install it (done above if you used ".[mcp]")
-pip install -e ".[mcp]"
+# 1. install with the MCP extra
+pip install "piwapp[mcp]"
 
 # 2. link your WhatsApp once — scan the QR it prints
-python -m piwapp.mcp_server --pair my.json
+piwapp-mcp --pair my.json
 #    creates my.json (+ .keys + .db) and prints the exact settings to use next
 
 # 3. register it with your assistant
@@ -196,7 +211,7 @@ python -m piwapp.mcp_server --pair my.json
 ```bash
 claude mcp add piwapp \
   -e PIWAPP_AUTH=my.json -e PIWAPP_DB=my.json.db \
-  -- python -m piwapp.mcp_server
+  -- piwapp-mcp
 ```
 
 **Claude Desktop / VS Code (Copilot)** — add this to the MCP config
@@ -206,8 +221,7 @@ claude mcp add piwapp \
 {
   "mcpServers": {
     "piwapp": {
-      "command": "python",
-      "args": ["-m", "piwapp.mcp_server"],
+      "command": "piwapp-mcp",
       "env": {
         "PIWAPP_AUTH": "/full/path/my.json",
         "PIWAPP_KEYS": "/full/path/my.json.keys",
