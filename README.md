@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/n-92-piwapp-badge.png)](https://mseep.ai/app/n-92-piwapp)
+
 ![piwapp](https://raw.githubusercontent.com/n-92/piwapp/main/piwapp.png "piwapp")
 
 # piwapp
