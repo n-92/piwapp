@@ -51,7 +51,10 @@ dev = [
     "grpcio-tools>=1.60",  # provides protoc to recompile WAProto.proto
 ]
 mcp = [
-    "mcp[cli]>=1.2",  # Model Context Protocol server (expose piwapp to an LLM)
+    # Model Context Protocol server (expose piwapp to an LLM).
+    # Pinned below 2.0: mcp_server.py imports mcp.server.fastmcp, which 2.x
+    # renamed to MCPServer (mcp.server.mcpserver) and moved other APIs.
+    "mcp[cli]>=1.2,<2",
 ]
 
 [project.urls]

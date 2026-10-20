@@ -32,6 +32,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP, Image
 
+from .binary.jids import jid_normalized_user
 from .store.sqlite_store import SqliteStore
 
 
@@ -81,14 +82,33 @@ def _iso(ts: int | None) -> str | None:
     return datetime.fromtimestamp(int(ts), tz=timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _me_user_jid() -> str | None:
+    """Our own user-level JID (no ``:device``), or ``None`` when offline.
+
+    ``state.me`` is normally the dict from ``connection.update`` but can be the
+    ``AuthenticationCreds.me`` model on some paths, so accept both.
+    """
+    me = state.me or {}
+    me_id = me.get("id") if isinstance(me, dict) else getattr(me, "id", None)
+    return jid_normalized_user(me_id) or None
+
+
 def _fmt_msg(m: dict) -> dict:
     """A JSON-friendly message view (drops the raw proto blob)."""
     key = m.get("key") or {}
+    from_me = bool(key.get("fromMe"))
+    sender = key.get("participant")
+    if not sender:
+        # 1:1 messages have no `participant`: the author is us when the message
+        # is outbound, and the other party otherwise. Falling back to
+        # `remoteJid` for outbound messages reported the *recipient* as the
+        # sender (the recipient is who `remoteJid` points at).
+        sender = _me_user_jid() if from_me else key.get("remoteJid")
     return {
         "chat": key.get("remoteJid"),
         "id": key.get("id"),
-        "from_me": bool(key.get("fromMe")),
-        "sender": key.get("participant") or key.get("remoteJid"),
+        "from_me": from_me,
+        "sender": sender,
         "timestamp": _iso(m.get("messageTimestamp")),
         "text": m.get("text"),
         "push_name": m.get("pushName"),

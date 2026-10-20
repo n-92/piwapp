@@ -62,6 +62,33 @@ def test_fmt_msg_drops_proto():
     assert "proto" not in out  # raw protobuf blob is never leaked
 
 
+def test_fmt_msg_outbound_dm_sender_is_us_not_the_recipient(monkeypatch):
+    # a 1:1 message has no `participant`; remoteJid points at the *recipient*,
+    # so deriving the sender from it credited our sent message to the other party
+    monkeypatch.setattr(mcp_mod.state, "me", {"id": "999:12@s.whatsapp.net"})
+    out = mcp_mod._fmt_msg(_msg(USER, "A", from_me=True))
+    assert out["sender"] == "999@s.whatsapp.net"  # device suffix stripped
+    assert out["chat"] == USER
+
+
+def test_fmt_msg_inbound_dm_sender_is_the_other_party(monkeypatch):
+    monkeypatch.setattr(mcp_mod.state, "me", {"id": "999:12@s.whatsapp.net"})
+    assert mcp_mod._fmt_msg(_msg(USER, "B"))["sender"] == USER
+
+
+def test_fmt_msg_group_sender_prefers_participant(monkeypatch):
+    monkeypatch.setattr(mcp_mod.state, "me", {"id": "999:12@s.whatsapp.net"})
+    m = _msg(GROUP, "C", from_me=False)
+    m["key"]["participant"] = "888@s.whatsapp.net"
+    assert mcp_mod._fmt_msg(m)["sender"] == "888@s.whatsapp.net"
+
+
+def test_fmt_msg_outbound_without_session_has_no_sender(monkeypatch):
+    # offline archive: we cannot know who "me" is, so never claim it was them
+    monkeypatch.setattr(mcp_mod.state, "me", None)
+    assert mcp_mod._fmt_msg(_msg(USER, "D", from_me=True))["sender"] is None
+
+
 @pytest.mark.asyncio
 async def test_archive_tools(tmp_path, monkeypatch):
     db = str(tmp_path / "mcp.db")

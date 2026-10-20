@@ -9,8 +9,12 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 # Current WA web version (from Baileys baileys-version.json). WhatsApp rejects
-# clients it considers too old; bump this if the gateway returns a 4xx failure.
-DEFAULT_WA_VERSION: tuple[int, int, int] = (2, 3000, 1035194821)
+# clients it considers too old with a ``<failure reason="405">`` and closes the
+# socket before any ``qr`` payload is emitted; bump this if the gateway returns
+# a 4xx failure. Mirrors
+# https://github.com/WhiskeySockets/Baileys/blob/master/src/Defaults/baileys-version.json
+# (2026-10: 2.3000.1043857760).
+DEFAULT_WA_VERSION: tuple[int, int, int] = (2, 3000, 1043857760)
 
 
 class ConnectionConfig(BaseModel):

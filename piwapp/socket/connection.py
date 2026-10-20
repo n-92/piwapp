@@ -19,6 +19,7 @@ import asyncio
 import base64
 import enum
 import os
+import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
@@ -355,7 +356,17 @@ class Connection:
         """List groups this account participates in ({id, subject, ...})."""
         from ..api import groups as gmod
         result = await self.query(gmod.build_list_groups_query(generate_message_tag()))
-        return gmod.parse_groups_list(result)
+        groups = gmod.parse_groups_list(result)
+        # Let the archives learn group subjects: nothing else emits this event,
+        # so `groups` stayed empty and chat lists had no name to fall back on.
+        if groups and self.events is not None:
+            from ..events import WAEventType
+            try:
+                await self.events.emit(WAEventType.GROUPS_UPSERT, groups)
+            except Exception as exc:  # noqa: BLE001 - never fail a metadata query
+                if _DEBUG:
+                    print(f"[debug] groups.upsert emit failed: {exc!r}")
+        return groups
 
     async def send_group_text(self, group_jid: str, text: str) -> str:
         """Send a text message to a group (sender-key + SKDM fan-out). Requires login."""
@@ -365,7 +376,9 @@ class Connection:
         if self.creds.me is None:
             raise RuntimeError("not logged in")
         msg_id = generate_message_id()
-        await self._relay_group(group_jid, ms.text_message(text), msg_id)
+        message = ms.text_message(text)
+        await self._relay_group(group_jid, message, msg_id)
+        await self._emit_sent(group_jid, msg_id, message, text)
         return msg_id
 
     async def _relay_group(
@@ -447,8 +460,49 @@ class Connection:
         if self.creds.me is None:
             raise RuntimeError("not logged in")
         msg_id = generate_message_id()
-        await self._relay_dm(to_jid, ms.text_message(text), msg_id)
+        message = ms.text_message(text)
+        await self._relay_dm(to_jid, message, msg_id)
+        await self._emit_sent(to_jid, msg_id, message, text)
         return msg_id
+
+    async def _emit_sent(
+        self, to_jid: str, msg_id: str, message: proto.Message, text: str | None,
+    ) -> None:
+        """Mirror an outgoing message into the local event stream.
+
+        WhatsApp never echoes a message back to the device that sent it, so
+        without this the stores (memory and SQLite) only ever see inbound
+        traffic: archives stay inbound-only and ``last_sent_message()`` always
+        returns ``None``. Emitting the same ``messages.upsert`` shape the
+        receive path uses keeps every consumer (store, CLI, MCP) in sync.
+        """
+        if self.events is None:
+            return
+        from ..api import media as md
+        from ..events import MessagesUpsert, UpsertType, WAEventType
+
+        me_id = self.creds.me.id if self.creds.me is not None else None
+        record = {
+            "key": {
+                "remoteJid": to_jid,
+                "id": msg_id,
+                "fromMe": True,
+                "participant": me_id if to_jid.endswith("@g.us") else None,
+            },
+            "message": message,
+            "text": text,
+            "media": md.media_summary(message),
+            "messageTimestamp": int(time.time()),
+            "pushName": None,
+        }
+        try:
+            await self.events.emit(
+                WAEventType.MESSAGES_UPSERT,
+                MessagesUpsert(messages=[record], type=UpsertType.APPEND),
+            )
+        except Exception as exc:  # noqa: BLE001 - a listener must never fail a send
+            if _DEBUG:
+                print(f"[debug] local echo for {msg_id} failed: {exc!r}")
 
     async def _relay_dm(
         self, to_jid: str, message: "proto.Message", msg_id: str,
@@ -532,6 +586,7 @@ class Connection:
         else:
             await self._relay_dm(to_jid, message, msg_id,
                                  stanza_attrs=stanza_attrs, enc_attrs=enc_attrs)
+        await self._emit_sent(to_jid, msg_id, message, caption)
         return msg_id
 
     def _build_ack(self, node: BinaryNode, error: int | None = None) -> BinaryNode:

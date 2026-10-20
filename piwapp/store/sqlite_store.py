@@ -17,6 +17,14 @@ from typing import Any
 
 from ..events import MessagesUpsert, TypedEventEmitter, WAEventType
 
+#: Servers that carry traffic which is *not* a conversation: status updates and
+#: channel (newsletter) posts. A status from a contact is not a chat with that
+#: contact, so these must never reach the ``chats`` table — otherwise
+#: ``recent_chats()`` lists ``status@broadcast`` as if it were a person.
+_PSEUDO_CHAT_SUFFIXES = ("@broadcast", "@newsletter")
+_NOT_PSEUDO_CHAT_SQL = " AND ".join(
+    f"jid NOT LIKE '%{suffix}'" for suffix in _PSEUDO_CHAT_SUFFIXES)
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
     chat_jid   TEXT NOT NULL,
@@ -83,21 +91,36 @@ class SqliteStore:
     def _on_messages(self, payload: Any) -> None:
         msgs = payload.messages if isinstance(payload, MessagesUpsert) else payload.get("messages", [])
         rows = []
+        chats: list[tuple[str, str | None, int]] = []
         for m in msgs:
             key = m.get("key") or {}
             jid, mid = key.get("remoteJid"), key.get("id")
             if not jid or not mid:
                 continue
+            ts = int(m.get("messageTimestamp") or 0)
             rows.append((
                 jid, mid, 1 if key.get("fromMe") else 0, key.get("participant"),
-                int(m.get("messageTimestamp") or 0), m.get("pushName"),
+                ts, m.get("pushName"),
                 m.get("text"), _msg_proto_bytes(m.get("message")),
             ))
+            # keep `chats` usable without a history sync: previously chat rows
+            # were only written by CHATS_UPSERT, which only the history blob
+            # emits, so recent_chats()/list_chats() stayed empty forever.
+            if not jid.endswith(_PSEUDO_CHAT_SUFFIXES):
+                chats.append((jid, None if jid.endswith("@g.us") else m.get("pushName"), ts))
         if rows:
             self._db.executemany(
                 "INSERT OR REPLACE INTO messages "
                 "(chat_jid,msg_id,from_me,participant,timestamp,push_name,text,proto) "
                 "VALUES (?,?,?,?,?,?,?,?)", rows)
+            self._db.executemany(
+                "INSERT INTO chats (jid,name,conversation_timestamp,unread_count,data) "
+                "VALUES (?,?,?,0,'{}') "
+                "ON CONFLICT(jid) DO UPDATE SET "
+                "  name = COALESCE(chats.name, excluded.name), "
+                "  conversation_timestamp = MAX(chats.conversation_timestamp, "
+                "                                excluded.conversation_timestamp)",
+                chats)
             self._db.commit()
 
     def _on_chats(self, payload: Any) -> None:
@@ -149,9 +172,30 @@ class SqliteStore:
         return json.loads(r["data"]) if r else None
 
     def recent_chats(self, limit: int = 20) -> list[dict[str, Any]]:
+        # filter pseudo-chats in SQL (not in Python) so `limit` still returns
+        # that many real conversations on archives that already stored some
         rows = self._db.execute(
-            "SELECT * FROM chats ORDER BY conversation_timestamp DESC LIMIT ?", (limit,)).fetchall()
-        return [dict(r) for r in rows]
+            f"SELECT * FROM chats WHERE {_NOT_PSEUDO_CHAT_SQL} "
+            "ORDER BY conversation_timestamp DESC LIMIT ?", (limit,)).fetchall()
+        out = []
+        for r in rows:
+            chat = dict(r)
+            if not chat.get("name"):
+                # live traffic carries no chat name (pushName belongs to the
+                # sender), so fall back to contacts and known group metadata
+                chat["name"] = self._chat_display_name(chat["jid"])
+            out.append(chat)
+        return out
+
+    def _chat_display_name(self, jid: str) -> str | None:
+        if jid.endswith("@g.us"):
+            meta = self.get_group_metadata(jid)
+            return (meta or {}).get("subject")
+        r = self._db.execute(
+            "SELECT name, notify FROM contacts WHERE jid=?", (jid,)).fetchone()
+        if r is None:
+            return None
+        return r["name"] or r["notify"]
 
     def last_sent_message(self) -> dict[str, Any] | None:
         r = self._db.execute(
