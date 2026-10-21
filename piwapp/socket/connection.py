@@ -466,6 +466,17 @@ class Connection:
         me_dec = jid_decode(me_id)
         recipient = _j.jid_normalized_user(to_jid)
 
+        # WhatsApp accepts a stanza addressed to a @lid but no device receives
+        # it (verified live: send_text() returns an id and nothing arrives
+        # anywhere, not even on our own phone). Until PN<->LID resolution
+        # exists, fail loudly instead of losing the message.
+        rec_dec = jid_decode(recipient)
+        if rec_dec is not None and rec_dec.server in ("lid", "hosted.lid"):
+            raise RuntimeError(
+                f"cannot send to {recipient}: LID addressing is not implemented; "
+                "the server accepts the stanza but nothing is delivered. "
+                "Send to the phone-number JID instead")
+
         # 1) enumerate devices for us + the recipient
         me_user_jid = jid_encode(me_dec.user, "s.whatsapp.net")
         usync = await self.query(ms.build_usync_query([me_user_jid, recipient], generate_message_tag()))
@@ -478,6 +489,16 @@ class Connection:
         me_devs = [d for d in targets if (jid_decode(d) or me_dec).user == me_dec.user]
         other_devs = [d for d in targets if (jid_decode(d) or me_dec).user != me_dec.user]
 
+        # Sending to our own number has no "recipient" leg: the message only
+        # travels as DSM copies for our other devices. For anyone else, zero
+        # recipient devices means the server drops the stanza, so refuse instead
+        # of reporting a success that never happened.
+        recipient_user = (jid_decode(recipient) or me_dec).user
+        if not other_devs and (recipient_user != me_dec.user or not me_devs):
+            raise RuntimeError(
+                f"recipient {recipient} has no reachable devices; refusing to "
+                "send a message that would be silently dropped")
+
         # 2) ensure sessions exist (fetch pre-key bundles for any missing)
         need = [d for d in targets if not self.signal_store.contains_session(d)]
         if need:
@@ -489,6 +510,14 @@ class Connection:
         other_nodes, di1 = ms.create_participant_nodes(self.signal_store, message, other_devs, enc_attrs)
         dsm = ms.dsm_message(recipient, message)
         me_nodes, di2 = ms.create_participant_nodes(self.signal_store, dsm, me_devs, enc_attrs)
+        if _DEBUG:
+            print(f"[debug] send {msg_id}: recipient_devs={other_devs} own_devs={me_devs}")
+            if len(other_nodes) != len(other_devs):
+                print(f"[debug] send {msg_id}: {len(other_devs) - len(other_nodes)} "
+                      "recipient leg(s) could not be encrypted")
+            if len(me_nodes) != len(me_devs):
+                print(f"[debug] send {msg_id}: {len(me_devs) - len(me_nodes)} own-device "
+                      "leg(s) could not be encrypted (sender's own history will miss it)")
 
         stanza = ms.build_message_stanza(
             msg_id, recipient, other_nodes + me_nodes,
@@ -567,6 +596,9 @@ class Connection:
                                    {"notification": node.attrs.get("type"), "from": node.attrs.get("from")})
 
     async def _on_receipt(self, node: BinaryNode) -> None:
+        if _DEBUG:
+            print(f"[debug] receipt type={node.attrs.get('type')} "
+                  f"from={node.attrs.get('from')} id={node.attrs.get('id')}")
         await self._send_ack(node)
         if self.events is not None:
             from ..events import WAEventType

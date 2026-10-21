@@ -104,3 +104,101 @@ def test_send_encryption_decrypts_on_receiver():
     delivered = BinaryNode(tag="message", attrs={"from": ALICE}, content=[enc])
     sender, msg = decrypt_dm_node(bob_store, delivered)
     assert text_of(msg) == "hi from send"
+
+
+async def test_relay_dm_refuses_lid_addressing_before_querying():
+    """A stanza addressed to a @lid is accepted by the server and delivered to
+    nobody (verified live: not even our own phone gets the copy). Refuse before
+    spending a USync round trip."""
+    from types import SimpleNamespace
+
+    import pytest
+
+    from piwapp.socket.connection import Connection
+
+    class _Conn:
+        def __init__(self):
+            self.creds = SimpleNamespace(me=SimpleNamespace(id="999:19@s.whatsapp.net"))
+            self.signal_store = None
+            self.sent = []
+
+        async def query(self, node, timeout=30.0):
+            raise AssertionError("must refuse before querying USync")
+
+        async def _send_node(self, node):
+            self.sent.append(node)
+
+    conn = _Conn()
+    with pytest.raises(RuntimeError, match="LID addressing"):
+        await Connection._relay_dm(conn, "73504171020377@lid", text_message("hi"), "MID3")
+    assert conn.sent == []
+
+
+async def test_relay_dm_refuses_a_recipient_without_devices():
+    """USync answers <device-list/> for a number that is not on WhatsApp; the old
+    code sent a stanza with no recipient legs and still reported success."""
+    from types import SimpleNamespace
+
+    import pytest
+
+    from piwapp.socket.connection import Connection
+
+    class _Conn:
+        """Just enough of Connection: only our own device is listed."""
+
+        def __init__(self):
+            self.creds = SimpleNamespace(me=SimpleNamespace(id="999:19@s.whatsapp.net"))
+            self.signal_store = None
+            self.sent = []
+
+        async def query(self, node, timeout=30.0):
+            return BinaryNode(tag="iq", content=[BinaryNode(tag="usync", content=[
+                BinaryNode(tag="list", content=[
+                    BinaryNode(tag="user", attrs={"jid": "999@s.whatsapp.net"}, content=[
+                        BinaryNode(tag="devices", content=[BinaryNode(tag="device-list", content=[
+                            BinaryNode(tag="device", attrs={"id": "19"})])])]),
+                    BinaryNode(tag="user", attrs={"jid": "5511999@s.whatsapp.net"}, content=[
+                        BinaryNode(tag="devices", content=[BinaryNode(tag="device-list")])]),
+                ])])])
+
+        async def _send_node(self, node):
+            self.sent.append(node)
+
+    conn = _Conn()
+    with pytest.raises(RuntimeError, match="no reachable devices"):
+        await Connection._relay_dm(conn, "5511999@s.whatsapp.net", text_message("hi"), "MID1")
+    assert conn.sent == []  # nothing was written to the socket
+
+
+async def test_relay_dm_still_allows_sending_to_our_own_number(monkeypatch):
+    """Sending to ourselves has no recipient leg; it must not trip the guard."""
+    from types import SimpleNamespace
+
+    import piwapp.api.messages_send as ms_mod
+    from piwapp.socket.connection import Connection
+
+    sent = []
+
+    class _Conn:
+        def __init__(self):
+            self.creds = SimpleNamespace(me=SimpleNamespace(id="999:19@s.whatsapp.net"))
+            self.signal_store = SimpleNamespace(contains_session=lambda d: True)
+
+        async def query(self, node, timeout=30.0):
+            return BinaryNode(tag="iq", content=[BinaryNode(tag="usync", content=[
+                BinaryNode(tag="list", content=[
+                    BinaryNode(tag="user", attrs={"jid": "999@s.whatsapp.net"}, content=[
+                        BinaryNode(tag="devices", content=[BinaryNode(tag="device-list", content=[
+                            BinaryNode(tag="device", attrs={"id": "0"}),
+                            BinaryNode(tag="device", attrs={"id": "19"}),
+                        ])])])])])])
+
+        async def _send_node(self, node):
+            sent.append(node)
+
+    monkeypatch.setattr(ms_mod, "create_participant_nodes",
+                        lambda store, msg, devs, attrs: ([BinaryNode(tag="enc")] * len(devs), False))
+    monkeypatch.setattr(ms_mod, "build_message_stanza", lambda *a, **k: BinaryNode(tag="message"))
+
+    await Connection._relay_dm(_Conn(), "999@s.whatsapp.net", text_message("hi"), "MID2")
+    assert len(sent) == 1
